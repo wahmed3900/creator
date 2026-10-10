@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: "OPENAI_API_KEY is not set on the server" }, { status: 500 });
+    }
     // Created per request so the build does not need OPENAI_API_KEY
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const { messages, userId, chatId } = await req.json();
@@ -75,6 +78,10 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("Chat API Error:", error);
+    // Surface OpenAI errors (bad key, no credit, rate limit) so they can be fixed
+    if (error instanceof OpenAI.APIError) {
+      return NextResponse.json({ error: `OpenAI: ${error.message}` }, { status: 502 });
+    }
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

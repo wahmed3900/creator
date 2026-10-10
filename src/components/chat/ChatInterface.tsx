@@ -82,7 +82,8 @@ export function ChatInterface({
       }
 
       if (!res.ok || !res.body) {
-        throw new Error("Failed to generate response");
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to generate response");
       }
 
       // Read the stream from the backend
