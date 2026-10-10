@@ -2,10 +2,10 @@ import { OpenAI } from "openai";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 export async function POST(req: Request) {
   try {
+    // Created per request so the build does not need OPENAI_API_KEY
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const { messages, userId } = await req.json();
     const user = await prisma.user.findUnique({ 
       where: { id: userId }, 

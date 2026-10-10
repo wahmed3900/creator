@@ -3,13 +3,13 @@ import { headers } from "next/headers";
 import Stripe from "stripe";
 import { prisma } from "@/lib/db";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: "2025-02-28.acacia" as any,
-});
-
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
-
 export async function POST(req: Request) {
+  // Created per request so the build does not need Stripe env vars
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+    apiVersion: "2025-02-28.acacia" as any,
+  });
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
+
   const body = await req.text();
   const signature = (await headers()).get("stripe-signature") as string;
 
