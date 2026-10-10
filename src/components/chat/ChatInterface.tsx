@@ -125,7 +125,7 @@ export function ChatInterface({
           <h3 className="font-semibold text-white">YouTube Growth Strategist</h3>
         </div>
         <span className="text-xs text-gray-400 bg-black/40 px-3 py-1 rounded-full border border-white/5">
-          GPT-4o Powered
+          AI Powered
         </span>
       </div>
 

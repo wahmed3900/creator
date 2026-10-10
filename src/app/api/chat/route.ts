@@ -1,14 +1,18 @@
-import { OpenAI } from "openai";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { describeAIError, pickProvider, streamChat, type ChatMessage } from "@/lib/ai";
+
+const SYSTEM_PROMPT = "You are an expert YouTube growth strategist.";
 
 export async function POST(req: Request) {
+  const provider = pickProvider();
+  if (!provider) {
+    return NextResponse.json(
+      { error: "No AI key set on the server. Add ANTHROPIC_API_KEY, GEMINI_API_KEY or OPENAI_API_KEY." },
+      { status: 500 }
+    );
+  }
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "OPENAI_API_KEY is not set on the server" }, { status: 500 });
-    }
-    // Created per request so the build does not need OPENAI_API_KEY
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const { messages, userId, chatId } = await req.json();
     const user = await prisma.user.findUnique({ 
       where: { id: userId }, 
@@ -39,22 +43,29 @@ export async function POST(req: Request) {
       }
     }
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are an expert YouTube growth strategist." }, 
-        ...messages
-      ],
-      stream: true,
-    });
+    const history: ChatMessage[] = messages
+      .filter((m: any) => m.role === "user" || m.role === "assistant")
+      .map((m: any) => ({ role: m.role, content: String(m.content) }));
+    const chunks = streamChat(provider, SYSTEM_PROMPT, history);
+    // Read the first chunk now so key or quota errors are returned as JSON, not a broken stream
+    const first = await chunks.next();
 
     const stream = new ReadableStream({
       async start(controller) {
+        const encoder = new TextEncoder();
         let fullText = "";
-        for await (const chunk of response) {
-          const text = chunk.choices[0]?.delta?.content || "";
-          fullText += text;
-          controller.enqueue(new TextEncoder().encode(text));
+        try {
+          if (!first.done) {
+            fullText += first.value;
+            controller.enqueue(encoder.encode(first.value));
+          }
+          for await (const text of chunks) {
+            fullText += text;
+            controller.enqueue(encoder.encode(text));
+          }
+        } catch (error) {
+          console.error("Chat stream error:", error);
+          controller.enqueue(encoder.encode("\n\n[The response was interrupted. Please try again.]"));
         }
         // Save the assistant's reply once streaming finishes
         if (chat && fullText) {
@@ -78,10 +89,9 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("Chat API Error:", error);
-    // Surface OpenAI errors (bad key, no credit, rate limit) so they can be fixed
-    if (error instanceof OpenAI.APIError) {
-      return NextResponse.json({ error: `OpenAI: ${error.message}` }, { status: 502 });
-    }
+    // Surface provider errors (bad key, no credit, rate limit) so they can be fixed
+    const aiError = describeAIError(provider, error);
+    if (aiError) return NextResponse.json({ error: aiError }, { status: 502 });
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
