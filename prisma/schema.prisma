@@ -1,0 +1,61 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  image         String?
+  credits       Int            @default(20)
+  subscription  Subscription?
+  chats         ChatSession[]
+  channels      Channel[]      // Added channel relation
+  createdAt     DateTime       @default(now())
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id])
+  stripeCustomerId     String   @unique
+  stripeSubscriptionId String?  @unique
+  plan                 String
+  interval             String
+  status               String
+  currentPeriodEnd     DateTime
+}
+
+model Channel {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channelId   String   @unique // YouTube Channel ID (e.g., UC...)
+  title       String   // YouTube Channel Name
+  thumbnail   String?  // Avatar image URL
+  subscribers Int?     // Subscriber count
+  createdAt   DateTime @default(now())
+}
+
+model ChatSession {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String    @default("New Strategy Session")
+  createdAt DateTime  @default(now())
+  messages  Message[]
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  chatId    String
+  chat      ChatSession @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      String      // "user" or "assistant"
+  content   String
+  createdAt DateTime    @default(now())
+}
