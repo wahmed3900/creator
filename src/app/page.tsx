@@ -51,7 +51,10 @@ export default function Home() {
 
   const refreshChats = useCallback(async (uid: string) => {
     const res = await fetch(`/api/chats?userId=${uid}`);
-    if (res.ok) setChats(await res.json());
+    if (!res.ok) return [];
+    const list: ChatSession[] = await res.json();
+    setChats(list);
+    return list;
   }, []);
 
   const refreshChannels = useCallback(async (uid: string) => {
@@ -61,11 +64,15 @@ export default function Home() {
 
   useEffect(() => {
     if (!userId) return;
-    refreshChats(userId);
+    // Open the most recent chat, or start one so messages always have somewhere to be saved
+    refreshChats(userId).then((list) => {
+      if (list.length) setActiveChatId(list[0].id);
+      else handleNewChat();
+    });
     refreshChannels(userId);
   }, [userId, refreshChats, refreshChannels]);
 
-  const handleNewChat = async () => {
+  async function handleNewChat() {
     if (!userId) return;
     const res = await fetch("/api/chats", {
       method: "POST",
@@ -76,7 +83,7 @@ export default function Home() {
     const chat = await res.json();
     setChats((prev) => [chat, ...prev]);
     setActiveChatId(chat.id);
-  };
+  }
 
   const handleAddChannel = async ({ channelId, title }: { channelId: string; title: string }) => {
     if (!userId) return;
@@ -110,14 +117,16 @@ export default function Home() {
       <main className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6">
         {loadError ? (
           <p className="text-sm text-red-400">{loadError}</p>
-        ) : !userId ? (
+        ) : !userId || !activeChatId ? (
           <p className="text-sm text-gray-400">Loading…</p>
         ) : (
           // key resets the conversation when switching or starting a chat
           <ChatInterface
-            key={activeChatId ?? "default"}
+            key={activeChatId}
             userId={userId}
+            chatId={activeChatId}
             onOpenUpgrade={() => setIsUpgradeOpen(true)}
+            onMessageSent={() => refreshChats(userId)}
           />
         )}
       </main>
