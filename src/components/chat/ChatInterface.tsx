@@ -8,13 +8,23 @@ interface Message {
   content: string;
 }
 
-export function ChatInterface({ userId, onOpenUpgrade }: { userId: string; onOpenUpgrade: () => void }) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "Hey creator! I'm your AI growth strategist. What YouTube strategy, CTR hook, or packaging idea can we work on today?",
-    },
-  ]);
+const GREETING: Message = {
+  role: "assistant",
+  content: "Hey creator! I'm your AI growth strategist. What YouTube strategy, CTR hook, or packaging idea can we work on today?",
+};
+
+export function ChatInterface({
+  userId,
+  chatId,
+  onOpenUpgrade,
+  onMessageSent,
+}: {
+  userId: string;
+  chatId: string | null;
+  onOpenUpgrade: () => void;
+  onMessageSent?: () => void;
+}) {
+  const [messages, setMessages] = useState<Message[]>([GREETING]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -24,6 +34,21 @@ export function ChatInterface({ userId, onOpenUpgrade }: { userId: string; onOpe
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // Load saved messages for this chat
+  useEffect(() => {
+    if (!chatId) return;
+    let cancelled = false;
+    fetch(`/api/chats/${chatId}?userId=${userId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.messages?.length) return;
+        setMessages([GREETING, ...data.messages.map((m: Message) => ({ role: m.role, content: m.content }))]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId, userId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -45,7 +70,7 @@ export function ChatInterface({ userId, onOpenUpgrade }: { userId: string; onOpe
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages, userId }),
+        body: JSON.stringify({ messages: newMessages, userId, chatId }),
       });
 
       if (res.status === 403) {
@@ -57,7 +82,8 @@ export function ChatInterface({ userId, onOpenUpgrade }: { userId: string; onOpe
       }
 
       if (!res.ok || !res.body) {
-        throw new Error("Failed to generate response");
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to generate response");
       }
 
       // Read the stream from the backend
@@ -86,6 +112,7 @@ export function ChatInterface({ userId, onOpenUpgrade }: { userId: string; onOpe
       setErrorMsg(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
+      onMessageSent?.();
     }
   };
 
@@ -98,7 +125,7 @@ export function ChatInterface({ userId, onOpenUpgrade }: { userId: string; onOpe
           <h3 className="font-semibold text-white">YouTube Growth Strategist</h3>
         </div>
         <span className="text-xs text-gray-400 bg-black/40 px-3 py-1 rounded-full border border-white/5">
-          GPT-4o Powered
+          AI Powered
         </span>
       </div>
 
